@@ -1,0 +1,39 @@
+# Data — never commit the datasets
+data/
+*.zip
+*.xlsx
+*.csv
+!docs/**/*.csv
+
+# Model artefacts
+artifacts/
+*.keras
+*.h5
+*.pb
+*.tflite
+saved_model/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+__MACOSX/
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+logs/
+*.log

@@ -1,0 +1,23 @@
+# Core ML -------------------------------------------------------------------
+tensorflow>=2.15,<2.22        # Keras 3 API; Colab ships a compatible version
+numpy>=1.26
+pandas>=2.0
+scikit-learn>=1.3
+scipy>=1.11
+
+# Images --------------------------------------------------------------------
+opencv-python-headless>=4.8   # the brief hints at OpenCV for sample plots
+Pillow>=10.0
+
+# Excel ---------------------------------------------------------------------
+openpyxl>=3.1                 # tourism_with_id.xlsx
+
+# Visualisation -------------------------------------------------------------
+matplotlib>=3.7
+
+# Notebooks -----------------------------------------------------------------
+jupyterlab>=4.0
+ipywidgets>=8.0
+
+# Testing -------------------------------------------------------------------
+pytest>=7.4
