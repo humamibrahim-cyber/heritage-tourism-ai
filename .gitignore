@@ -1,12 +1,13 @@
-# Data — never commit the datasets
-data/
+# Data — never commit the datasets.
+# Leading slash matters: a bare `data/` would also ignore `src/data/`.
+/data/
 *.zip
 *.xlsx
 *.csv
 !docs/**/*.csv
 
 # Model artefacts
-artifacts/
+/artifacts/
 *.keras
 *.h5
 *.pb
