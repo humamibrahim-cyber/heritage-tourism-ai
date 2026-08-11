@@ -12,7 +12,7 @@
 | Part | Model | Headline metric |
 |---|---|---|
 | 1 | EfficientNetV2-B0, two-stage transfer learning | `[fill in: X% test accuracy, Y macro-F1]` |
-| 2 | Item-based CF + Keras matrix factorisation | `[fill in: NDCG@10 vs popularity baseline]` |
+| 2 | Item-based CF + Keras matrix factorisation | NDCG@10 ≈ 0.018 vs 0.019 random — see the data-signal finding below |
 
 > Run the notebooks, then replace the bracketed values here and in each notebook's Conclusions section.
 
@@ -116,7 +116,25 @@ The notebooks are thin: they orchestrate, narrate and visualise. All logic lives
 
 ## Part 2 — Recommendation engine
 
-**Data.** ~300 users, ~437 places, ~10,000 ratings — a **~92% sparse** matrix. That sparsity drives every modelling decision here.
+**Data.** 300 users, 437 places, 10,000 ratings (9,597 after removing 403 duplicate user–place pairs) — a **92.7% sparse** matrix.
+
+### ⚠️ Important finding: the ratings carry no preference signal
+
+Before modelling, notebook 2 §6 runs five independent diagnostics on `tourism_rating.csv`. On the supplied data, **four of them fail**:
+
+| Check | Result | Expected if real |
+|---|---|---|
+| Rating distribution | mean **3.07**, skew **−0.05**, near-uniform 1–5 | mean 3.8–4.3, clearly negative skew (J-shaped) |
+| Places differ? (ANOVA) | F=1.08, **p=0.13** | significant |
+| Split-half reliability of place means | r = **0.005** (shuffled null: 0.001 ± 0.049) | clearly positive |
+| Agreement with the independent listed `Rating` | r = **0.010**, **p=0.83** | positive correlation |
+| Category / city effects | 0.11% / 0.08% of variance, both n.s. | meaningful differences |
+
+The `Place_Ratings` column is statistically indistinguishable from randomly generated numbers. Consequently **no collaborative filtering model can beat a random recommender on this data** — confirmed empirically: NDCG@10 is 0.016 (popularity), 0.018 (item-CF) and 0.019 (random). They are the same number.
+
+This is a property of the dataset, not a modelling failure, and the project treats it as a finding to report rather than something to tune away. The models are still built exactly as the brief specifies; what changes is how their scores are interpreted. The `Rating` column in `tourism_with_id.xlsx` is genuine — it is only the user-level ratings that are synthetic.
+
+Run `signal.diagnose(ratings, merged)` to reproduce the table above.
 
 **Three models, deliberately:**
 

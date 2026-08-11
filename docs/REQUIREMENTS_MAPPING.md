@@ -57,11 +57,13 @@ this as the checklist before submitting.
 
 | Addition | Why | Where |
 |---|---|---|
-| Keras embedding matrix factorisation | Keeps the whole capstone on TensorFlow; gives personalised top-N and a second route to place similarity | `02` §7 |
-| Popularity baseline | Without it, no one can tell whether the CF models add value | `02` §8 |
+| **Data signal diagnostic** | **Establishes that `Place_Ratings` is statistically indistinguishable from random before any model is built — without it, the modelling results are uninterpretable** | `02` §6, `src/evaluation/signal.py` |
+| Random-recommender floor | The popularity baseline is not the floor; random is. Any model that cannot beat random has learned nothing | `signal.make_random_recommend_fn`, `02` §9 |
+| Keras embedding matrix factorisation | Keeps the whole capstone on TensorFlow; gives personalised top-N and a second route to place similarity | `02` §8 |
+| Popularity baseline | Without it, no one can tell whether the CF models add value | `02` §9 |
 | Precision/Recall/NDCG@10 + catalogue coverage | RMSE alone does not measure the quality of the list a tourist actually sees | `src/evaluation/ranking.py` |
-| Cross-model agreement check | If two independent methods disagree completely on a 92%-sparse matrix, both are fitting noise | `02` §7 |
-| Bootstrap CIs on category means | The category gaps are small; this tests whether they are real | `02` §5 |
+| Cross-model agreement check | If two independent methods disagree completely on a 92.7%-sparse matrix, both are fitting noise | `02` §8 |
+| Bootstrap CIs on category means | The category gaps are small; this tests whether they are real (they are not) | `02` §5 |
 | Shrinkage on item similarities | Two co-raters can otherwise produce a similarity of 1.0 that means nothing | `ItemBasedCF.fit` |
 
 ---

@@ -329,6 +329,95 @@ def test_class_weights_favour_rare_classes():
 
 
 # --------------------------------------------------------------------------
+# Signal diagnostics
+# --------------------------------------------------------------------------
+@pytest.fixture(scope="module")
+def random_ratings():
+    """Ratings drawn uniformly at random - no preference structure at all.
+
+    This mirrors the supplied tourism_rating.csv, which failed four independent
+    signal checks. The diagnostic must catch it.
+    """
+    rng = np.random.default_rng(7)
+    n_users, n_places = 120, 200
+    rows = [
+        {
+            "user_id": int(u),
+            "place_id": int(rng.integers(0, n_places)),
+            "place_ratings": float(rng.integers(1, 6)),
+        }
+        for u in range(n_users)
+        for _ in range(40)
+    ]
+    return pd.DataFrame(rows).drop_duplicates(subset=["user_id", "place_id"])
+
+
+@pytest.fixture(scope="module")
+def signalful_ratings():
+    """Ratings with a strong, real place-quality effect. Must pass the checks."""
+    rng = np.random.default_rng(7)
+    n_users, n_places = 120, 200
+    quality = rng.uniform(2.0, 5.0, n_places)   # each place has a true quality
+    rows = [
+        {
+            "user_id": int(u),
+            "place_id": int(p),
+            "place_ratings": float(np.clip(round(quality[p] + rng.normal(0, 0.4)), 1, 5)),
+        }
+        for u in range(n_users)
+        for p in rng.choice(n_places, size=40, replace=False)
+    ]
+    return pd.DataFrame(rows).drop_duplicates(subset=["user_id", "place_id"])
+
+
+def test_diagnose_flags_random_ratings(random_ratings):
+    from src.evaluation import signal
+
+    table, verdict = signal.diagnose(random_ratings, verbose=False)
+    assert "NO USABLE PREFERENCE SIGNAL" in verdict
+    assert not table.empty
+    assert set(table.columns) == {"check", "metric", "value"}
+
+
+def test_diagnose_passes_real_signal(signalful_ratings):
+    from src.evaluation import signal
+
+    _, verdict = signal.diagnose(signalful_ratings, verbose=False)
+    assert "NO USABLE PREFERENCE SIGNAL" not in verdict, (
+        "diagnostic must not cry wolf on data that genuinely has structure"
+    )
+
+
+def test_split_half_separates_signal_from_noise(random_ratings, signalful_ratings):
+    from src.evaluation import signal
+
+    noise = signal.split_half_reliability(random_ratings, n_shuffles=20)
+    real = signal.split_half_reliability(signalful_ratings, n_shuffles=20)
+
+    assert not noise["exceeds_noise"], "random ratings must not look reliable"
+    assert real["exceeds_noise"], "structured ratings must exceed the shuffled null"
+    assert real["observed_r"] > noise["observed_r"]
+
+
+def test_place_anova_detects_place_effects(random_ratings, signalful_ratings):
+    from src.evaluation import signal
+
+    assert not signal.place_effect_anova(random_ratings)["significant"]
+    assert signal.place_effect_anova(signalful_ratings)["significant"]
+
+
+def test_random_recommender_fn_excludes_seen():
+    from src.evaluation.signal import make_random_recommend_fn
+
+    fn = make_random_recommend_fn(range(50), seed=1)
+    seen = {0, 1, 2, 3, 4}
+    recs = fn(user_id=0, k=10, seen=seen)
+    assert len(recs) == 10
+    assert not (set(recs) & seen), "random recommender leaked already-seen places"
+    assert len(set(recs)) == 10, "must not repeat within one list"
+
+
+# --------------------------------------------------------------------------
 # Config integrity
 # --------------------------------------------------------------------------
 def test_config_class_names_match_expected_counts():

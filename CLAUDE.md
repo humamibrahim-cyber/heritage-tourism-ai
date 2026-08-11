@@ -50,9 +50,25 @@ src/viz/plots.py           shared matplotlib style — use it, do not restyle ad
    drops them.
 6. **`time_minutes` is ~50% null.** Leave it as `NaN`. Do not mean-impute —
    that invents tour durations and corrupts any figure derived from them.
-7. **The rating matrix is ~92% sparse** (300 users × 437 places, ~10k ratings).
-   This is the binding constraint on Part 2. Do not scale up the embedding
-   dimension "to improve results" — it will memorise.
+7. **The rating matrix is 92.7% sparse** (300 users × 437 places, 10k ratings,
+   9,597 after removing 403 duplicate user–place pairs). Do not scale up the
+   embedding dimension "to improve results" — it will memorise.
+8. **`Place_Ratings` contains no preference signal — verified, not suspected.**
+   Four independent checks fail: near-uniform distribution (mean 3.07, skew
+   −0.05), no significant between-place ANOVA (p=0.13), split-half reliability
+   of place means r=0.005 against a shuffled null of 0.001±0.049, and zero
+   correlation with the independent listed `Rating` (r=0.010, p=0.83). Random,
+   popularity and item-CF recommenders all score NDCG@10 ≈ 0.016–0.019.
+
+   **This means no model can win here, and that is the correct finding.** Do not
+   "fix" it by tuning hyperparameters, changing the split, evaluating on the
+   training set, or quietly reporting RMSE alone (RMSE ≈ 1.41 is just the
+   predict-the-mean floor and looks deceptively fine). Run
+   `src/evaluation/signal.py::diagnose` and report the verdict.
+
+   The `Rating` column in `tourism_with_id.xlsx` *is* genuine — only the
+   user-level ratings are synthetic. Content-based work using Category / City /
+   Description / Rating is therefore still meaningful.
 
 ## Gotchas that have already bitten this codebase
 
