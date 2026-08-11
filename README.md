@@ -123,7 +123,7 @@ The notebooks are thin: they orchestrate, narrate and visualise. All logic lives
 
 ### ⚠️ Important finding: the ratings carry no preference signal
 
-Before modelling, notebook 2 §6 runs five independent diagnostics on `tourism_rating.csv`. On the supplied data, **four of them fail**:
+Before modelling, notebook 2 §7 runs five independent diagnostics on `tourism_rating.csv`. On the supplied data, **four of them fail**:
 
 | Check | Result | Expected if real |
 |---|---|---|

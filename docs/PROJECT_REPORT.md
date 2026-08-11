@@ -163,7 +163,7 @@ duplicates `Place_Id`).
 **This is the central finding of Part 2 and it governs everything after it.**
 
 Before modelling, five independent diagnostics were run on `Place_Ratings`
-(notebook 02 §6). Four failed:
+(notebook 02 §7). Four failed:
 
 | Check | Observed | Expected if the ratings were real |
 |---|---|---|
