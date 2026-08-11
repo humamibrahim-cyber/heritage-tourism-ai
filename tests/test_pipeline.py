@@ -329,6 +329,224 @@ def test_class_weights_favour_rare_classes():
 
 
 # --------------------------------------------------------------------------
+# Descriptive statistics, outliers, missingness, normalisation
+# --------------------------------------------------------------------------
+@pytest.fixture(scope="module")
+def messy_table():
+    """A table with a planted outlier, a skewed column and MAR missingness."""
+    rng = np.random.default_rng(3)
+    n = 200
+    category = rng.choice(["A", "B", "C"], size=n)
+    price = rng.exponential(5000, n).round()          # strong right skew
+    price[0] = 900_000                                # extreme outlier
+    price[1:40] = 0                                   # many free entries
+    duration = rng.normal(60, 15, n).round()
+    # MAR: category C almost never records a duration
+    duration[(category == "C") & (rng.random(n) < 0.9)] = np.nan
+    return pd.DataFrame(
+        {"category": category, "price": price, "duration": duration,
+         "rating": rng.normal(4.4, 0.2, n).round(1)}
+    )
+
+
+def test_numeric_summary_reports_shape(messy_table):
+    from src.data import eda
+
+    summary = eda.numeric_summary(messy_table, ["price", "duration"])
+    assert summary.loc["price", "skew"] > 2, "should detect the strong right skew"
+    assert summary.loc["price", "n_zero"] >= 39
+    assert summary.loc["duration", "n_missing"] > 0
+    for col in ("mean", "median", "iqr", "cv", "kurtosis", "pct_missing"):
+        assert col in summary.columns
+
+
+@pytest.mark.parametrize("method", ["iqr", "zscore", "mad"])
+def test_outlier_methods_find_planted_extreme(messy_table, method):
+    from src.data import eda
+
+    mask = eda.detect_outliers(messy_table["price"], method=method)
+    assert mask.iloc[0], f"{method} missed the 900,000 outlier"
+
+
+def test_mad_handles_degenerate_spread():
+    """Regression: >50% identical values makes the MAD zero.
+
+    The robust z-score is then 0/0 and the naive implementation reported "no
+    outliers" - silently missing the single most obvious anomaly.
+    """
+    from src.data import eda
+
+    series = pd.Series([1.0] * 50 + [7.5])
+    mask = eda.detect_outliers(series, method="mad")
+    assert mask.iloc[-1], "degenerate-MAD case must still flag the odd value out"
+    assert mask.sum() == 1, "must not flag the identical majority"
+
+
+def test_outlier_report_covers_all_methods(messy_table):
+    from src.data import eda
+
+    report = eda.outlier_report(messy_table, ["price", "rating"])
+    for method in ("iqr", "zscore", "mad"):
+        assert f"n_{method}" in report.columns
+    assert report.loc["price", "n_iqr"] > report.loc["rating", "n_iqr"]
+
+
+def test_missingness_mechanism_detects_mar(messy_table):
+    from src.data import eda
+
+    result = eda.missingness_mechanism(messy_table, "duration", ["category"])
+    row = result.iloc[0]
+    assert row["p_value"] < 0.05
+    assert "MAR" in row["verdict"], "planted category-dependent missingness must be MAR"
+
+
+def test_suggest_transform_recommends_log_for_skew(messy_table):
+    from src.data import eda
+
+    rec = eda.suggest_transform(messy_table["price"])
+    assert "log" in rec["recommendation"].lower()
+    assert rec["has_zeros"] is True, "log1p (not log) is required when zeros exist"
+
+
+def test_log1p_reduces_skew(messy_table):
+    from scipy import stats
+
+    from src.data import eda
+
+    before = abs(stats.skew(messy_table["price"]))
+    after = abs(stats.skew(eda.log1p_transform(messy_table["price"])))
+    assert after < before, f"log1p should reduce skew ({before:.2f} -> {after:.2f})"
+
+
+def test_log1p_rejects_negatives():
+    from src.data import eda
+
+    with pytest.raises(ValueError, match="negative"):
+        eda.log1p_transform(pd.Series([-1.0, 2.0, 3.0]))
+
+
+def test_scalings_preserve_ordering(messy_table):
+    from src.data import eda
+
+    raw = messy_table["price"]
+    for scaled in (eda.robust_scale(raw), eda.minmax_scale(raw), eda.log1p_transform(raw)):
+        assert scaled.notna().all()
+        # Monotone transforms must not reorder the data.
+        assert (raw.rank() == scaled.rank()).all()
+    assert eda.minmax_scale(raw).between(0, 1).all()
+
+
+def test_geographic_outliers_flags_wrong_coordinate():
+    """A place whose coordinates sit far from its own city's centroid."""
+    from src.data import eda
+
+    places = pd.DataFrame({
+        "place_id": range(1, 13),
+        "place_name": [f"P{i}" for i in range(1, 13)],
+        "city": ["Jakarta"] * 12,
+        "lat": [-6.1, -6.2, -6.15, -6.18, -6.12, -6.19,
+                -6.14, -6.16, -6.13, -6.17, -6.11, 1.08],   # last one is wrong
+        "long": [106.8] * 11 + [103.9],
+    })
+    flagged = eda.geographic_outliers(places, threshold=5.0)
+    assert 12 in flagged["place_id"].values
+    assert flagged["km_from_centroid"].abs().max() > 100
+
+
+def test_country_bounds_check():
+    from src.data import eda
+
+    places = pd.DataFrame({
+        "place_id": [1, 2], "place_name": ["ok", "bad"], "city": ["Jakarta"] * 2,
+        "lat": [-6.2, 48.85], "long": [106.8, 2.35],   # second is Paris
+    })
+    assert len(eda.country_bounds_check(places)) == 1
+
+
+# --------------------------------------------------------------------------
+# Image data audit (Part 1)
+# --------------------------------------------------------------------------
+@pytest.fixture(scope="module")
+def audited_images(tmp_path_factory):
+    """An image tree with deliberately planted quality problems."""
+    import shutil
+
+    import cv2
+
+    root = tmp_path_factory.mktemp("imgaudit")
+    train, test = root / "train", root / "test"
+    rng = np.random.default_rng(0)
+    classes = ["altar", "apse", "vault"]
+
+    for directory, n in [(train, 8), (test, 3)]:
+        for cls in classes:
+            (directory / cls).mkdir(parents=True, exist_ok=True)
+            for i in range(n):
+                cv2.imwrite(
+                    str(directory / cls / f"{i}.jpg"),
+                    rng.integers(0, 255, (128, 128, 3), dtype=np.uint8),
+                )
+
+    shutil.copy(train / "altar/0.jpg", train / "altar/dup.jpg")        # duplicate
+    shutil.copy(train / "altar/1.jpg", train / "apse/crossclass.jpg")  # label noise
+    shutil.copy(train / "vault/2.jpg", test / "vault/leak.jpg")        # leakage
+    cv2.imwrite(str(train / "apse/blank.jpg"), np.zeros((128, 128, 3), np.uint8))
+    cv2.imwrite(str(train / "vault/wide.jpg"),
+                rng.integers(0, 255, (40, 900, 3), dtype=np.uint8))
+    (train / "altar/broken.jpg").write_bytes(b"definitely not an image")
+
+    from src.data import image_audit
+
+    return {
+        "train": image_audit.audit_images(train, verbose=False),
+        "test": image_audit.audit_images(test, verbose=False),
+    }
+
+
+def test_audit_detects_corrupt_file(audited_images):
+    from src.data.image_audit import quality_report
+
+    counts = quality_report(audited_images["train"]).set_index("issue")["count"]
+    assert counts["corrupt / unreadable files"] == 1
+
+
+def test_audit_detects_duplicates_and_label_noise(audited_images):
+    from src.data.image_audit import find_duplicates
+
+    dupes = find_duplicates(audited_images["train"])
+    assert len(dupes) == 2
+    assert dupes["cross_class"].any(), (
+        "the same image in two classes is label noise and must be surfaced"
+    )
+
+
+def test_audit_detects_blank_and_aspect_outliers(audited_images):
+    from src.data.image_audit import quality_report
+
+    counts = quality_report(audited_images["train"]).set_index("issue")["count"]
+    assert counts["near-constant (blank) images"] == 1
+    assert counts["aspect-ratio outliers"] == 1
+
+
+def test_audit_detects_train_test_leakage(audited_images):
+    """The single most important image check: a clean test score depends on it."""
+    from src.data.image_audit import find_leakage
+
+    leakage = find_leakage(audited_images["train"], audited_images["test"])
+    assert len(leakage) == 1
+    assert leakage.iloc[0]["test_file"] == "leak.jpg"
+
+
+def test_per_class_stats_reports_duplicate_rate(audited_images):
+    from src.data.image_audit import per_class_stats
+
+    stats = per_class_stats(audited_images["train"])
+    assert stats.loc["altar", "duplicate_rate_%"] > 0
+    for col in ("n_images", "mean_brightness", "mean_contrast", "n_unique_images"):
+        assert col in stats.columns
+
+
+# --------------------------------------------------------------------------
 # Signal diagnostics
 # --------------------------------------------------------------------------
 @pytest.fixture(scope="module")

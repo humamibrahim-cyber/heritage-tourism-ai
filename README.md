@@ -72,6 +72,8 @@ heritage-tourism-ai/
 │   ├── config.py                 all hyperparameters and paths
 │   ├── data/
 │   │   ├── image_data.py         tf.data pipeline, sample grids, class weights
+│   │   ├── image_audit.py        corrupt files, duplicates, train/test leakage
+│   │   ├── eda.py                descriptive stats, outliers, missingness, scaling
 │   │   └── tourism_data.py       loading, schema validation, cleaning
 │   ├── models/
 │   │   ├── backbones.py          backbone registry, transfer-learning assembly
@@ -82,9 +84,10 @@ heritage-tourism-ai/
 │   │   └── train_classifier.py   two-stage schedule, backbone benchmark
 │   ├── evaluation/
 │   │   ├── metrics.py            classification metrics + error analysis
-│   │   └── ranking.py            RMSE, Precision/Recall/NDCG@K, coverage
+│   │   ├── ranking.py            RMSE, Precision/Recall/NDCG@K, coverage
+│   │   └── signal.py             is there any preference signal in the ratings?
 │   └── viz/plots.py              shared chart style
-├── tests/test_pipeline.py        21 smoke + regression tests
+├── tests/test_pipeline.py        44 smoke + regression tests
 ├── docs/
 │   ├── SETUP.md                  environment, data placement, troubleshooting
 │   ├── REQUIREMENTS_MAPPING.md   every brief task → where it is satisfied
@@ -150,13 +153,44 @@ Embedding dimension is capped at 32 with L2 regularisation and early stopping. W
 
 ---
 
+## Data preparation and EDA
+
+Both notebooks audit their data before any model is fitted.
+
+**Part 1 (§3)** — `src/data/image_audit.py` checks for corrupt files, byte-identical
+duplicates, cross-class duplicates (label noise), blank images, aspect-ratio
+outliers, and — most importantly — **images present in both train and test**.
+Any overlap there means the reported test accuracy is partly memorisation. Takes
+about 10–30 seconds over all 11,700 images.
+
+**Part 2 (§3)** — `src/data/eda.py` covers what cleaning alone does not:
+
+| | |
+|---|---|
+| Descriptive statistics | count, missing, zeros, quartiles, IQR, CV, **skew, kurtosis** |
+| Outliers | IQR, z-score and MAD side by side — disagreement between them is itself diagnostic |
+| Geographic integrity | coordinate-string vs lat/long consistency, country bounds, per-city robust distance |
+| Missing data | not just *how much* but **why** — chi-square test for MCAR vs MAR |
+| Normalisation | skew-based transform recommendation, with before/after comparison |
+
+Findings on the supplied data: `price` is extremely right-skewed (skew 7.3,
+max 900,000 IDR, 137 free entries) and `log1p` brings it to −0.6; `Time_Minutes`
+is **MAR, not MCAR** (missingness depends on category, p < 0.0001 — 100% missing
+for places of worship vs 33% for shopping centres), which is why it is never
+mean-imputed; and one place has coordinates ~800 km from its stated city.
+
+Crucially, the outlier tooling flags *candidates* rather than deleting rows.
+Kepulauan Seribu looks like a geographic outlier but genuinely belongs to
+Jakarta — dropping it would be data destruction. Only inspection separates a
+real error from a legitimate extreme.
+
 ## Testing
 
 ```bash
 pytest tests/ -v
 ```
 
-21 tests covering: the classifier graph builds and freezes correctly for all three backbones, BatchNorm stays frozen during fine-tuning, the custom callback fires at its threshold, augmentation is active in training and inert at inference, item-CF recovers a planted cluster structure and produces a symmetric bounded similarity matrix, NDCG rewards higher placement, the Keras model trains and its rating scaling round-trips, and every recommender returns a well-formed frame.
+44 tests covering: the classifier graph builds and freezes correctly for all three backbones, BatchNorm stays frozen during fine-tuning, the custom callback fires at its threshold, augmentation is active in training and inert at inference, item-CF recovers a planted cluster structure and produces a symmetric bounded similarity matrix, NDCG rewards higher placement, the Keras model trains and its rating scaling round-trips, and every recommender returns a well-formed frame.
 
 That last one is a regression test for a real bug found during development: indexing with an unnamed pandas `Index` discards the index name, so `reset_index()` produced a column called `index` and `place_id` was silently dropped from the output.
 

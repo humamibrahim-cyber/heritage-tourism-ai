@@ -17,6 +17,7 @@ this as the checklist before submitting.
 | 5 | Compile with the right optimizer, loss function and metric | `01` §5 | `src/models/backbones.py::compile_model` — Adam, SparseCategoricalCrossentropy, accuracy |
 | 6 | Define a callback class to stop training once validation accuracy reaches a chosen number | `01` §6 | `src/training/callbacks.py::make_accuracy_threshold_callback` (target 93%); verified by `tests::test_accuracy_threshold_callback_stops_training` |
 | 7 | Set up train/test directories and review sample counts per class | `01` §2 | `src/data/image_data.py::dataset_summary`, `count_images_per_class` |
+| — | Image data quality audit before training | `01` §3 | `src/data/image_audit.py` — corrupt files, duplicates, cross-class label noise, blank images, aspect-ratio outliers, **train/test leakage**, per-class brightness statistics |
 | 8 | Train **without** augmentation, monitoring validation accuracy | `01` §8 | `src/training/train_classifier.py::train_two_stage` (`run_name="no_aug"`) |
 | 10 | Train **with** augmentation, monitoring validation accuracy | `01` §9 | same, with `augmentation=build_augmentation()` (`run_name="with_aug"`) |
 | 12 | Visualise training and validation accuracy per epoch to see if the model overfits | `01` §10 | `src/viz/plots.py::plot_training_curves`, `compare_histories` |
@@ -40,9 +41,11 @@ this as the checklist before submitting.
 
 | # | Task (from the brief) | Notebook section | Implementation |
 |---|---|---|---|
-| 1 | Import all datasets and perform preliminary inspection | `02` §2 | `src/data/tourism_data.py::load_raw`, `inspect` |
-| 1.I | Check for missing values and duplicates | `02` §2 | `inspect` (nulls, dtypes, duplicate rows) |
-| 1.II | Remove any anomalies found in the data | `02` §2 | `clean` — duplicate (user, place) pairs, out-of-range ratings, impossible ages, orphan foreign keys |
+| 1 | Import all datasets and perform preliminary inspection | `02` §2–3 | `src/data/tourism_data.py::load_raw`, `inspect`; `src/data/eda.py` |
+| 1.I | Check for missing values and duplicates | `02` §2, §3.4 | `inspect`; `eda.missingness_report`, `eda.missingness_mechanism` (MCAR vs MAR chi-square) |
+| 1.II | Remove any anomalies found in the data | `02` §2, §3.2–3.3 | `clean` — duplicate (user, place) pairs, out-of-range ratings, impossible ages, orphan foreign keys; `eda.detect_outliers` (IQR/z-score/MAD), `eda.geographic_outliers`, `eda.coordinate_consistency`, `eda.country_bounds_check` |
+| — | Descriptive statistics before modelling | `02` §3.1 | `eda.numeric_summary` (incl. skew/kurtosis/CV), `eda.categorical_summary`, `eda.correlation_matrix` |
+| — | Normalisation / scaling | `02` §3.5 | `eda.transform_report`, `log1p_transform`, `robust_scale`, `minmax_scale` |
 | 2.I | Analyse the age distribution of users who rate places | `02` §3 | histogram + age bands |
 | 2.I | Identify where most of these tourists come from | `02` §3 | `location` / derived `province` frequency charts |
 | 3.I | What are the different categories of tourist spots? | `02` §4 | `places["category"].value_counts()` |
@@ -71,7 +74,7 @@ this as the checklist before submitting.
 ## Pre-submission checklist
 
 - [ ] Both notebooks run top to bottom without errors
-- [ ] `pytest tests/ -v` passes (21 tests)
+- [ ] `pytest tests/ -v` passes (44 tests)
 - [ ] Bracketed `[…]` placeholders filled in — README results table, both Conclusions sections, `docs/PROJECT_REPORT.md`
 - [ ] `REPO_URL` updated in both notebooks' first cell
 - [ ] Colab badge URLs in README point at your GitHub username

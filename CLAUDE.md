@@ -25,6 +25,8 @@ do not inline substantial logic in a cell.
 ```
 src/config.py              ImageConfig / RecoConfig dataclasses — all tunables
 src/data/image_data.py     tf.data pipeline, OpenCV sample grids, class weights
+src/data/image_audit.py    corrupt/duplicate/blank images, TRAIN-TEST LEAKAGE check
+src/data/eda.py            descriptive stats, outlier detection, missingness, scaling
 src/data/tourism_data.py   loading with schema validation, cleaning, merging
 src/models/backbones.py    BackboneSpec registry, transfer-learning assembly
 src/models/item_cf.py      item-item cosine CF, popularity baseline
@@ -33,6 +35,7 @@ src/training/callbacks.py  custom accuracy-threshold callback (brief task 6)
 src/training/train_classifier.py  two-stage schedule, backbone benchmark
 src/evaluation/metrics.py  classification metrics, error analysis
 src/evaluation/ranking.py  RMSE, Precision/Recall/NDCG@K, coverage
+src/evaluation/signal.py   is there preference signal in the ratings at all?
 src/viz/plots.py           shared matplotlib style — use it, do not restyle ad hoc
 ```
 
@@ -88,6 +91,20 @@ src/viz/plots.py           shared matplotlib style — use it, do not restyle ad
 - **Keras 3 `Callback.model` is read-only.** Use `set_model()` in tests.
 - **Final Dense must be `dtype="float32"`** when mixed precision is on.
 
+## Outlier philosophy — do not "clean" these away
+
+`eda.geographic_outliers` flags Kepulauan Seribu (Jakarta's offshore islands)
+and the Ciwidey / Bandung Regency mountain sites. **These are correct records.**
+Only entries hundreds of km from their stated city are errors. The detectors
+return candidates for human inspection; they never drop rows, and neither
+should you. The same applies to `price`: the 900,000 IDR entries are real
+premium attractions, not typos — they need a `log1p` transform, not deletion.
+
+Also note `detect_outliers(method="mad")` handles the degenerate case where
+>50% of values are identical (MAD = 0). The naive version returned "no
+outliers" there, which silently missed the single most obvious anomaly in an
+image-dimension column. Guarded by `test_mad_handles_degenerate_spread`.
+
 ## Conventions
 
 - Python ≥ 3.10, type hints on public functions, `from __future__ import annotations`.
@@ -101,7 +118,7 @@ src/viz/plots.py           shared matplotlib style — use it, do not restyle ad
 ## Commands
 
 ```bash
-pytest tests/ -v                    # 21 tests, ~25 s on CPU
+pytest tests/ -v                    # 44 tests, ~20 s on CPU
 python -c "from src.config import describe; print(describe())"
 jupyter lab notebooks/
 ```
