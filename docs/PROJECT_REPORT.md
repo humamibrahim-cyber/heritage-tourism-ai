@@ -767,11 +767,3 @@ All random seeds fixed at 42. Both notebooks run top to bottom in Google Colab; 
 | Unnamed pandas index dropped `place_id` | `test_all_recommenders_return_place_id` |
 
 **Environment:** TensorFlow 2.20, Python 3.12, Google Colab with an L4 GPU. Part 1 runtime ≈ 40 minutes; Part 2 ≈ 5 minutes on CPU.
-
-## 19. References
-
-- Llamas, J., Lerones, P. M., Medina, R., Zalama, E., & Gómez-García-Bermejo, J. (2017). *Classification of Architectural Heritage Images Using Deep Learning Techniques.* Applied Sciences, 7(10), 992.
-- Tan, M., & Le, Q. (2021). *EfficientNetV2: Smaller Models and Faster Training.* ICML.
-- Sarwar, B., Karypis, G., Konstan, J., & Riedl, J. (2001). *Item-Based Collaborative Filtering Recommendation Algorithms.* WWW.
-- Koren, Y., Bell, R., & Volinsky, C. (2009). *Matrix Factorization Techniques for Recommender Systems.* IEEE Computer, 42(8), 30–37.
-- Little, R. J. A., & Rubin, D. B. (2019). *Statistical Analysis with Missing Data* (3rd ed.). Wiley. — MCAR/MAR framework used in §8.6.
