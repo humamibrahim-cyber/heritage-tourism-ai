@@ -192,7 +192,7 @@ def build_datasets(cfg, augment: bool = False, verbose: bool = True):
         subset="validation",
         seed=cfg.seed,
         batch_size=cfg.batch_size,
-        shuffle=False,
+        shuffle=True,
         **common,
     )
     test_ds = tf.keras.utils.image_dataset_from_directory(
